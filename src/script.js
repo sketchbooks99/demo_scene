@@ -1,14 +1,23 @@
-onload = function() {
+(() => {
+    let lighting_shader;
+
     var c = document.getElementById('canvas');
     c.width = 500;
     c.height = 500;
 
     var gl = c.getContext('webgl') || c.getContext('experiment-webgl');
 
-    var v_shader = create_shader('vs');
-    var f_shader = create_shader('fs');
-
-    var prg = create_program(v_shader, f_shader);
+    loadShaderSource(
+        'shader/shader.vert', 
+        'shader/shader.frag',
+        (shader) => {
+            let vs = create_shader(shader.vs, gl.VERTEX_SHADER);
+            let fs = create_shader(shader.fs, gl.FRAGMENT_SHADER);
+            let prg = create_program(vs, fs);
+            if(prg = null) { return; }
+            lighting_shader = new ProgramParameter(prg);
+        }
+    )
 
     var attLocation = new Array();
     attLocation[0] = gl.getAttribLocation(prg, 'position');
@@ -88,6 +97,16 @@ onload = function() {
 
         setTimeout(arguments.callee, 1000 / 30);
     })();
+
+    class ProgramParameter {
+        constructor(program) {
+            this.program = program;
+            this.attLocation = [];
+            this.attStride = [];
+            this.uniLocation = [];
+            this.uniType = [];
+        }
+    }
 
     function create_shader(id) {
         var shader;
@@ -216,4 +235,28 @@ onload = function() {
         }
         return color;
     }
-};
+
+    function loadShaderSource(vsPath, fsPath, callback) {
+        let vs, fs;
+        xhr(vsPath, true);
+        xhr(fsPath, false);
+        function xhr(source, isVertex) {
+            let xml = new XMLHttpRequest();
+            xml.open('GET', source, true);
+            xml.setRequestHeader('Pragma', 'no-cache');
+            xml.setRequestHeader('Cache-Control', 'no-cache');
+            xml.onload = () => {
+                if(isVertex) {
+                    vs = xml.responseText;
+                } else {
+                    fs = xml.responseText;
+                }
+                if(vs != null && fs != null) {
+                    console.log('loaded', vsPath, fsPath);
+                    callback({vs: vs, fs: fs});
+                }
+            };
+            xml.send();
+        }
+    }
+})();
