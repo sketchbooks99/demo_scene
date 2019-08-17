@@ -1,102 +1,141 @@
 (() => {
+    let canvas;
+    let canvasWidth;
+    let canvasHeight;
+    let gl;
+    let ext;
+    let run; 
+    let mat;
+    let textures = [];
+    let mouse = [0.0, 0.0];
+    let isMouseDown = false;
+
     let lighting_shader;
+    let raymarch_shader;
 
-    var c = document.getElementById('canvas');
-    c.width = 500;
-    c.height = 500;
+    window.addEventListener('load', () => {
+        // canvas element を取得しサイズをウィンドウサイズに設定
+        canvas = document.getElementById('canvas');
+        canvasWidth = window.innerWidth;
+        canvasHeight = window.innerHeight;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
 
-    var gl = c.getContext('webgl') || c.getContext('experiment-webgl');
-
-    loadShaderSource(
-        'shader/shader.vert', 
-        'shader/shader.frag',
-        (shader) => {
-            let vs = create_shader(shader.vs, gl.VERTEX_SHADER);
-            let fs = create_shader(shader.fs, gl.FRAGMENT_SHADER);
-            let prg = create_program(vs, fs);
-            if(prg = null) { return; }
-            lighting_shader = new ProgramParameter(prg);
+        gl = canvas.getContext('webgl');
+        if(gl == null) {
+            console.log('webgl unsupported');
+            return;
         }
-    )
+        mat = new matIV();
 
-    var attLocation = new Array();
-    attLocation[0] = gl.getAttribLocation(prg, 'position');
-    attLocation[1] = gl.getAttribLocation(prg, 'normal');
-    attLocation[2] = gl.getAttribLocation(prg, 'color');
+        // to be enable webgl extensions
+        ext = getWebGLExtensions();
 
-    var attStride = new Array();
-    attStride[0] = 3;
-    attStride[1] = 3;
-    attStride[2] = 4;
+        mouse = [0, 0];
+        // setting the event to be enable to stop running by ESC Key
+        window.addEventListener('keydown', (eve) => {
+            run = eve.keyCode !== 27;
+        }, false);
 
-    var torus_data = torus(32, 32, 1.0, 2.0);
-    var position = torus_data[0];
-    var normal = torus_data[1];
-    var color = torus_data[2];
-    var index = torus_data[3];
+        window.addEventListener('mousemove', (eve) => {
+            if(isMouseDown !== true) { return; }
+            let x = (eve.clientX / canvasWidth) * 2.0 - 1.0;
+            let y = (eve.clientY / canvasHeight) * 2.0 - 1.0;
+            mouse = [x, -y];
+        }, false);
 
-    var pos_vbo = create_vbo(position);
-    var nor_vbo = create_vbo(normal);
-    var col_vbo = create_vbo(color);
+        textures[0] = tex;
 
-    set_attribute([pos_vbo, nor_vbo, col_vbo], attLocation, attStride);
+        loadShaderSource(
+            'shader/shader.vert', 
+            'shader/shader.frag',
+            (shader) => {
+                let vs = create_shader(shader.vs, gl.VERTEX_SHADER);
+                let fs = create_shader(shader.fs, gl.FRAGMENT_SHADER);
+                let prg = create_program(vs, fs);
+                if(prg == null) { return; }
+                lighting_shader = new ProgramParameter(prg);
+                init();
+            }
+        );
 
-    var ibo = create_ibo(index);
+    }, false);
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+    function init() {
+        lighting_shader.attLocation[0] = gl.getAttribLocation(lighting_shader.program, 'position');
+        lighting_shader.attLocation[1] = gl.getAttribLocation(lighting_shader.program, 'normal');
+        lighting_shader.attLocation[2] = gl.getAttribLocation(lighting_shader.program, 'color');
 
-    var uniLocation = new Array();
-    uniLocation[0] = gl.getUniformLocation(prg, 'mvpMatrix');
-    uniLocation[1] = gl.getUniformLocation(prg, 'invMatrix');
-    uniLocation[2] = gl.getUniformLocation(prg, 'lightDirection');
+        lighting_shader.attStride[0] = 3;
+        lighting_shader.attStride[1] = 3;
+        lighting_shader.attStride[2] = 4;
 
-    // minMatrix.jsを用いた行列関連処理
-    var m = new matIV();
+        var torus_data = torus(32, 32, 1.0, 2.0);
+        var position = torus_data[0];
+        var normal = torus_data[1];
+        var color = torus_data[2];
+        var index = torus_data[3];
 
-    var mMatrix = m.identity(m.create());
-    var vMatrix = m.identity(m.create());
-    var pMatrix = m.identity(m.create());
-    var tmpMatrix = m.identity(m.create());
-    var mvpMatrix = m.identity(m.create());
-    var invMatrix = m.identity(m.create());
+        var pos_vbo = create_vbo(position);
+        var nor_vbo = create_vbo(normal);
+        var col_vbo = create_vbo(color);
 
-    m.lookAt([0.0, 0.0, 20.0], [0, 0, 0], [0, 1, 0], vMatrix);
-    m.perspective(45, c.width / c.height, 0.1, 100, pMatrix);
-    m.multiply(pMatrix, vMatrix, tmpMatrix);
+        var ibo = create_ibo(index);
 
-    var lightDirection = [-0.5, 0.5, 0.5];
+        set_attribute([pos_vbo, nor_vbo, col_vbo], lighting_shader.attLocation, lighting_shader.attStride, ibo);
 
-    var count = 0;
+        lighting_shader.uniLocation[0] = gl.getUniformLocation(lighting_shader.program, 'mvpMatrix');
+        lighting_shader.uniLocation[1] = gl.getUniformLocation(lighting_shader.program, 'invMatrix');
+        lighting_shader.uniLocation[2] = gl.getUniformLocation(lighting_shader.program, 'lightDirection');
 
-    gl.enable(gl.DEPTH_TEST);
-    gl.depthFunc(gl.LEQUAL);
-    gl.enable(gl.CULL_FACE);
+        // minMatrix.jsを用いた行列関連処理
+        var m = new matIV();
 
-    // 恒常ループ
-    (function(){
-        gl.clearColor(0.0, 0.0, 0.0, 1.0);
-        gl.clearDepth(1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        var mMatrix = m.identity(m.create());
+        var vMatrix = m.identity(m.create());
+        var pMatrix = m.identity(m.create());
+        var tmpMatrix = m.identity(m.create());
+        var mvpMatrix = m.identity(m.create());
+        var invMatrix = m.identity(m.create());
 
-        count++;
+        m.lookAt([0.0, 0.0, 20.0], [0, 0, 0], [0, 1, 0], vMatrix);
+        m.perspective(45, canvas.width / canvas.height, 0.1, 100, pMatrix);
+        m.multiply(pMatrix, vMatrix, tmpMatrix);
 
-        var rad = (count % 360) * Math.PI / 180;
+        var lightDirection = [-0.5, 0.5, 0.5];
 
-        m.identity(mMatrix);
-        m.rotate(mMatrix, rad, [0, 1, 0.8], mMatrix);
-        m.multiply(tmpMatrix, mMatrix, mvpMatrix);
+        var count = 0;
 
-        m.inverse(mMatrix, invMatrix);
-        gl.uniformMatrix4fv(uniLocation[0], false, mvpMatrix);
-        gl.uniformMatrix4fv(uniLocation[1], false, invMatrix);
-        gl.uniform3fv(uniLocation[2], lightDirection);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        gl.enable(gl.CULL_FACE);
 
-        gl.drawElements(gl.TRIANGLES, index.length, gl.UNSIGNED_SHORT, 0);
+        // 恒常ループ
+        (function(){
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clearDepth(1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        gl.flush();
+            count++;
 
-        setTimeout(arguments.callee, 1000 / 30);
-    })();
+            var rad = (count % 360) * Math.PI / 180;
+
+            m.identity(mMatrix);
+            m.rotate(mMatrix, rad, [0, 1, 0.8], mMatrix);
+            m.multiply(tmpMatrix, mMatrix, mvpMatrix);
+
+            m.inverse(mMatrix, invMatrix);
+            gl.uniformMatrix4fv(lighting_shader.uniLocation[0], false, mvpMatrix);
+            gl.uniformMatrix4fv(lighting_shader.uniLocation[1], false, invMatrix);
+            gl.uniform3fv(lighting_shader.uniLocation[2], lightDirection);
+
+            gl.drawElements(gl.TRIANGLES, index.length, gl.UNSIGNED_SHORT, 0);
+
+            gl.flush();
+
+            setTimeout(arguments.callee, 1000 / 30);
+        })();
+    }
 
     class ProgramParameter {
         constructor(program) {
@@ -108,49 +147,47 @@
         }
     }
 
-    function create_shader(id) {
-        var shader;
-    
-        var scriptElement = document.getElementById(id);
-    
-        if(!scriptElement){ return; }
-    
-        switch(scriptElement.type) {
-            case 'x-shader/x-vertex':
-                shader = gl.createShader(gl.VERTEX_SHADER);
-                break;
-            case 'x-shader/x-fragment':
-                shader = gl.createShader(gl.FRAGMENT_SHADER);
-                break;
-            default:
-                return;
-        }
-    
-        // シェーダにソースを割り当てる
-        gl.shaderSource(shader, scriptElement.text);
-        // シェーダコンパイル
+    function create_texture(source, callback) {
+        let img = new Image();
+        img.addEventListener('load', () => {
+            let tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            callback(tex);
+        }, false);
+        img.src = source;
+    }
+
+    function create_shader(source, type) {
+        let shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
         gl.compileShader(shader);
-        // シェーダが正しくコンパイルされたかチェック
         if(gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
             return shader;
         } else {
             alert(gl.getShaderInfoLog(shader));
+            return null;
         }
     }
     
-    function create_program(fs, vs) {
-        var program = gl.createProgram();
-    
+    function create_program(vs, fs) {
+        if(vs == null || fs == null) { return; }
+        let program = gl.createProgram();
         gl.attachShader(program, vs);
         gl.attachShader(program, fs);
-    
         gl.linkProgram(program);
-    
         if(gl.getProgramParameter(program, gl.LINK_STATUS)) {
             gl.useProgram(program);
             return program;
         } else {
             alert(gl.getProgramInfoLog(program));
+            return null;
         }
     }
     
@@ -166,11 +203,14 @@
         return vbo;
     }
 
-    function set_attribute(vbo, attL, attS) {
+    function set_attribute(vbo, attL, attS, ibo) {
         for (var i in vbo) {
             gl.bindBuffer(gl.ARRAY_BUFFER, vbo[i]);
             gl.enableVertexAttribArray(attL[i]);
             gl.vertexAttribPointer(attL[i], attS[i], gl.FLOAT, false, 0, 0);
+        }
+        if(ibo != null) {
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
         }
     }
 
@@ -258,5 +298,96 @@
             };
             xml.send();
         }
+    }
+
+    /**
+     * @param {Array} vbo - VBOを格納した配列
+     * @param {Array} attL - attribute location を格納した配列
+     * @param {Array} attS - attribute stride を格納した配列
+     * @param {WebGLBuffer} ibo - IBO
+     */
+    function setAttribute(vbo, attL, attS, ibo) {
+        for(let i in vbo) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, vbo[i]);
+            gl.enableVertexAttribArray(attL[i]);
+            gl.vertexAttribPointer(attL[i], attS[i], gl.FLOAT, false, 0, 0);
+        }
+        if(ibo != null) {
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+        }
+    }
+
+    /**
+     * フレームバッファを生成して返す
+     * @param {number} width - フレームバッファの幅
+     * @param {number} height - フレームバッファの高さ 
+     * @return {object} 生成した各種オブジェクトはラップして返却する
+     * @property {WebGLFramebuffer} framebuffer - フレームバッファ
+     * @property {WebGLRenderbuffer} renderbuffer - 深度バッファとして設定したレンダーバッファ
+     * @property {WebGLTexture} texture - カラーバッファとして設定したテクスチャ
+     */
+    function createFramebuffer(width, height) {
+        let frameBuffer = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
+        let depthRenderBuffer = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthRenderbuffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRenderBuffer);
+        let fTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, fTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSINGED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fTexture, 0);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return {framebuffer: frameBuffer, renderbuffer: depthRenderBuffer, texture: fTexture};
+    }
+
+    /**
+     * フレームバッファを生成して返す。（フロートテクスチャ版）
+     * @param {object} ext - getWebGLExtensions の戻り値
+     * @param {number} width - フレームバッファの値
+     * @param {number} height - フレームバッファの高さ
+     * @return {object} 生成した各種オブジェクトはラップして返却する
+     * @property {WebGLFramebuffer} framebuffer - フレームバッファ
+     * @property {WebGLTexture} texture - カラーバッファとして設定したテクスチャ
+     */
+    function createFramebufferFloat(ext, width, height) {
+        if(ext == null || (ext.textureFloat == null && ext.textureHalfFloat == null)) {
+            console.log('float texture not support');
+            return;
+        }
+        let flg = (ext.textureFloat != null) ? gl.FLOAT : ext.textureHalfFloat.HALF_FLOAT_OES;
+        let frameBuffer = gl.createFrameBuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+        let fTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, fTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, flg, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl_TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATRACHMENT0, gl.TEXTURE_2D, fTexture, 0);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return {framebuffer: frameBuffer, texture: fTexture};
+    }
+
+    /**
+     * @return {object} 取得した拡張機能
+     * @property {object} elementIndexUint - Uint32 フォーマットを利用できるようにする
+     * @property {object} textureFloat - フロートテクスチャを利用できるようにする
+     * @property {object} textureHalfFloat - ハーフフロートテクスチャを利用できるようにする
+     */
+    function getWebGLExtensions(){
+        return {
+            elementIndexUint: gl.getExtension('OES_element_index_uint'),
+            textureFloat:     gl.getExtension('OES_texture_float'),
+            textureHalfFloat: gl.getExtension('OES_texture_half_float')
+        };
     }
 })();
