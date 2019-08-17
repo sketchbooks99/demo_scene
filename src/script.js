@@ -50,14 +50,26 @@
             'shader/shader.vert', 
             'shader/shader.frag',
             (shader) => {
-                let vs = create_shader(shader.vs, gl.VERTEX_SHADER);
-                let fs = create_shader(shader.fs, gl.FRAGMENT_SHADER);
-                let prg = create_program(vs, fs);
+                let vs = createShader(shader.vs, gl.VERTEX_SHADER);
+                let fs = createShader(shader.fs, gl.FRAGMENT_SHADER);
+                let prg = createProgram(vs, fs);
                 if(prg == null) { return; }
                 lighting_shader = new ProgramParameter(prg);
-                init();
             }
         );
+        
+        loadShaderSource(
+            'shader/raymarch.vert',
+            'shader/raymarch.frag',
+            (shader) => {
+                let vs = createShader(shader.vs, gl.VERTEX_SHADER);
+                let fs = createShader(shader.fs, gl.FRAGMENT_SHADER);
+                let prg = createProgram(vs, fs);
+                if(prg == null) { return; }
+                raymarch_shader = new ProgramParameter(prg);
+            }
+        )
+        init();
 
     }, false);
 
@@ -88,6 +100,13 @@
         lighting_shader.uniLocation[1] = gl.getUniformLocation(lighting_shader.program, 'invMatrix');
         lighting_shader.uniLocation[2] = gl.getUniformLocation(lighting_shader.program, 'lightDirection');
 
+        raymarch_shader.uniLocation[0] = gl.getUniformLocation(raymarch_shader.program, 'time');
+        raymarch_shader.uniLocation[1] = gl.getUniformLocation(raymarch_shader.program, 'mouse');
+        raymarch_shader.uniLocation[2] = gl.getUniformLocation(raymarch_shader, 'resolution');
+        raymarch_shader.uniType[0]     = 'uniform1i';
+        raymarch_shader.uniType[1]     = 'uniform1fv';
+        raymarch_shader.uniType[2]     = 'uniform2fv';
+
         // minMatrix.jsを用いた行列関連処理
         var m = new matIV();
 
@@ -110,31 +129,40 @@
         gl.depthFunc(gl.LEQUAL);
         gl.enable(gl.CULL_FACE);
 
+        let startTime = Date.now();
+        let nowTime = 0;
+        run = true;
+        render();
+
         // 恒常ループ
-        (function(){
+        function render() {
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
             gl.clearDepth(1.0);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-            count++;
+            nowTime = (Date.now() - startTime) * 0.001;
 
-            var rad = (count % 360) * Math.PI / 180;
+            // var rad = (count % 360) * Math.PI / 180;
 
-            m.identity(mMatrix);
-            m.rotate(mMatrix, rad, [0, 1, 0.8], mMatrix);
-            m.multiply(tmpMatrix, mMatrix, mvpMatrix);
+            // m.identity(mMatrix);
+            // m.rotate(mMatrix, rad, [0, 1, 0.8], mMatrix);
+            // m.multiply(tmpMatrix, mMatrix, mvpMatrix);
 
-            m.inverse(mMatrix, invMatrix);
-            gl.uniformMatrix4fv(lighting_shader.uniLocation[0], false, mvpMatrix);
-            gl.uniformMatrix4fv(lighting_shader.uniLocation[1], false, invMatrix);
-            gl.uniform3fv(lighting_shader.uniLocation[2], lightDirection);
+            // m.inverse(mMatrix, invMatrix);
+            // gl.uniformMatrix4fv(lighting_shader.uniLocation[0], false, mvpMatrix);
+            // gl.uniformMatrix4fv(lighting_shader.uniLocation[1], false, invMatrix);
+            // gl.uniform3fv(lighting_shader.uniLocation[2], lightDirection);
+
+            gl[raymarch_shader.uniType[0]](raymarch_shader.uniLocation[0], nowTime);
+            gl[raymarch_shader.uniType[1]](raymarch_shader.uniLocation[1], mouse);
+            gl[raymarch_shader.uniType[2]](raymarch_shader.uniLocation[2], [canvasWidth, canvasHeight]);
 
             gl.drawElements(gl.TRIANGLES, index.length, gl.UNSIGNED_SHORT, 0);
 
             gl.flush();
 
             setTimeout(arguments.callee, 1000 / 30);
-        })();
+        }
     }
 
     class ProgramParameter {
@@ -147,7 +175,7 @@
         }
     }
 
-    function create_texture(source, callback) {
+    function createTexture(source, callback) {
         let img = new Image();
         img.addEventListener('load', () => {
             let tex = gl.createTexture();
@@ -164,7 +192,14 @@
         img.src = source;
     }
 
-    function create_shader(source, type) {
+    /**
+     * シェーダオブジェクトを生成して返す
+     * コンパイルに失敗した場合は理由をアラートし null を返す。
+     * @param {*} source - シェーダのソースコード文字列
+     * @param {*} type - gl.VERTEX_SHADER or gl.FRAGMENT_SHADER
+     * @return {WebGLShader} シェーダオブジェクト
+     */
+    function createShader(source, type) {
         let shader = gl.createShader(type);
         gl.shaderSource(shader, source);
         gl.compileShader(shader);
@@ -176,7 +211,14 @@
         }
     }
     
-    function create_program(vs, fs) {
+    /**
+     * プログラムオブジェクトを生成して返す。
+     * シェーダのリンクに失敗した場合は利用をアラートし null を返す
+     * @param {WebGLShader} vs 
+     * @param {WebGLShader} fs
+     * @return {WebGLProgram} プログラムオブジェクト 
+     */
+    function createProgram(vs, fs) {
         if(vs == null || fs == null) { return; }
         let program = gl.createProgram();
         gl.attachShader(program, vs);
@@ -191,38 +233,42 @@
         }
     }
     
-    function create_vbo(data) {
+    /**
+     * VBO を生成して返す。
+     * @param {Array} data - 頂点属性データを格納した配列
+     * @return {WebGLBuffer} VBO 
+     */
+    function createVbo(data) {
         var vbo = gl.createBuffer();
-    
         gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
-    
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);  
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    
         return vbo;
     }
 
-    function set_attribute(vbo, attL, attS, ibo) {
-        for (var i in vbo) {
-            gl.bindBuffer(gl.ARRAY_BUFFER, vbo[i]);
-            gl.enableVertexAttribArray(attL[i]);
-            gl.vertexAttribPointer(attL[i], attS[i], gl.FLOAT, false, 0, 0);
-        }
-        if(ibo != null) {
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-        }
+    /**
+     * IBO を生成して返す
+     * @param {Array} data - インデックスデータを格納した配列
+     * @return {WebGLBuffer} - IBO
+     */
+    function createIbo(data) {
+        var ibo = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(data), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+        return ibo;
     }
 
-    function create_ibo(data) {
-        var ibo = gl.createBuffer();
-
+    /**
+     * IBO を生成して返す（INT 拡張版）
+     * @param {Array} data - インデックスデータを格納した配列
+     * @return {WebGLBuffer} IBO
+     */
+    function createIboInt(data) {
+        let ibo = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(data), gl.STATIC_DRAW);
-
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(data), gl.STATIC_DRAW);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
         return ibo;
     }
 
@@ -276,6 +322,12 @@
         return color;
     }
 
+    /**
+     * XHR でシェーダのソースコードを外部ファイルから取得しコールバックを呼ぶ
+     * @param {string} vsPath - 頂点シェーダの記述されたファイルのパス 
+     * @param {*} fsPath - フラグメントシェーダの記述されたファイルパス
+     * @param {*} callback - コールバック関数
+     */
     function loadShaderSource(vsPath, fsPath, callback) {
         let vs, fs;
         xhr(vsPath, true);
