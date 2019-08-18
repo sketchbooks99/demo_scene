@@ -13,6 +13,8 @@
     let lighting_shader;
     let raymarch_shader;
 
+    const POSTEFFECT_BUFFER_INDEX = 1;
+
     window.addEventListener('load', () => {
         // canvas element を取得しサイズをウィンドウサイズに設定
         canvas = document.getElementById('canvas');
@@ -44,8 +46,6 @@
             mouse = [x, -y];
         }, false);
 
-        textures[0] = tex;
-
         loadShaderSource(
             'shader/shader.vert', 
             'shader/shader.frag',
@@ -55,6 +55,7 @@
                 let prg = createProgram(vs, fs);
                 if(prg == null) { return; }
                 lighting_shader = new ProgramParameter(prg);
+                loadCheck();
             }
         );
         
@@ -67,9 +68,17 @@
                 let prg = createProgram(vs, fs);
                 if(prg == null) { return; }
                 raymarch_shader = new ProgramParameter(prg);
+                loadCheck();
             }
-        )
-        init();
+        );
+
+        function loadCheck() {
+            if(
+                lighting_shader != null &&
+                raymarch_shader != null && 
+                true
+            ) {init();}
+        }
 
     }, false);
 
@@ -82,52 +91,86 @@
         lighting_shader.attStride[1] = 3;
         lighting_shader.attStride[2] = 4;
 
-        var torus_data = torus(32, 32, 1.0, 2.0);
-        var position = torus_data[0];
-        var normal = torus_data[1];
-        var color = torus_data[2];
-        var index = torus_data[3];
+        // let torus_data = torus(32, 32, 1.0, 2.0);
+        // let position = torus_data[0];
+        // let normal = torus_data[1];
+        // let color = torus_data[2];
+        // let index = torus_data[3];
 
-        var pos_vbo = create_vbo(position);
-        var nor_vbo = create_vbo(normal);
-        var col_vbo = create_vbo(color);
+        let planePosition = [
+            1.0, 1.0, 0.0,
+            -1.0, 1.0, 0.0, 
+            1.0, -1.0, 0.0,
+            -1.0, -1.0, 0.0
+        ];
+        let planeTexCoord = [
+            1.0, 0.0,
+            0.0, 0.0, 
+            1.0, 1.0, 
+            0.0, 1.0
+        ];
+        let planeIndex = [
+            0, 1, 2, 2, 1, 3
+        ];
+        let planeVBO = createVbo(planePosition);
+        let planeIBO = createIbo(planeIndex);
+        let planeTexCoordVBO = [
+            createVbo(planePosition),
+            createVbo(planeTexCoord)
+        ];
 
-        var ibo = create_ibo(index);
+        // let pos_vbo = create_vbo(position);
+        // let nor_vbo = create_vbo(normal);
+        // let col_vbo = create_vbo(color);
 
-        set_attribute([pos_vbo, nor_vbo, col_vbo], lighting_shader.attLocation, lighting_shader.attStride, ibo);
+        // let ibo = create_ibo(index);
+
+        // setAttribute([pos_vbo, nor_vbo, col_vbo], lighting_shader.attLocation, lighting_shader.attStride, ibo);
 
         lighting_shader.uniLocation[0] = gl.getUniformLocation(lighting_shader.program, 'mvpMatrix');
         lighting_shader.uniLocation[1] = gl.getUniformLocation(lighting_shader.program, 'invMatrix');
         lighting_shader.uniLocation[2] = gl.getUniformLocation(lighting_shader.program, 'lightDirection');
 
+        raymarch_shader.attLocation[0] = gl.getAttribLocation(raymarch_shader.program, 'position');
+        raymarch_shader.attStride[0] = 3;
         raymarch_shader.uniLocation[0] = gl.getUniformLocation(raymarch_shader.program, 'time');
         raymarch_shader.uniLocation[1] = gl.getUniformLocation(raymarch_shader.program, 'mouse');
-        raymarch_shader.uniLocation[2] = gl.getUniformLocation(raymarch_shader, 'resolution');
-        raymarch_shader.uniType[0]     = 'uniform1i';
-        raymarch_shader.uniType[1]     = 'uniform1fv';
+        raymarch_shader.uniLocation[2] = gl.getUniformLocation(raymarch_shader.program, 'resolution');
+        raymarch_shader.uniType[0]     = 'uniform1f';
+        raymarch_shader.uniType[1]     = 'uniform2fv';
         raymarch_shader.uniType[2]     = 'uniform2fv';
 
         // minMatrix.jsを用いた行列関連処理
-        var m = new matIV();
-
-        var mMatrix = m.identity(m.create());
-        var vMatrix = m.identity(m.create());
-        var pMatrix = m.identity(m.create());
-        var tmpMatrix = m.identity(m.create());
-        var mvpMatrix = m.identity(m.create());
-        var invMatrix = m.identity(m.create());
+        let m = new matIV();
+        let mMatrix = m.identity(m.create());
+        let vMatrix = m.identity(m.create());
+        let pMatrix = m.identity(m.create());
+        let tmpMatrix = m.identity(m.create());
+        let mvpMatrix = m.identity(m.create());
+        let invMatrix = m.identity(m.create());
 
         m.lookAt([0.0, 0.0, 20.0], [0, 0, 0], [0, 1, 0], vMatrix);
         m.perspective(45, canvas.width / canvas.height, 0.1, 100, pMatrix);
         m.multiply(pMatrix, vMatrix, tmpMatrix);
 
-        var lightDirection = [-0.5, 0.5, 0.5];
+        // frame buffer
+        let postEffectBuffers = [
+            createFramebufferFloat(ext, canvasWidth, canvasHeight),
+            createFramebufferFloat(ext, canvasWidth, canvasHeight)
+        ];
 
-        var count = 0;
+        let lightDirection = [-0.5, 0.5, 0.5];
+
+        let count = 0;
 
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
         gl.enable(gl.CULL_FACE);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, planeVBO);
+        gl.enableVertexAttribArray(raymarch_shader.attLocation[0]);
+        gl.vertexAttribPointer(raymarch_shader.attLocation[0], 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, planeIBO);
 
         let startTime = Date.now();
         let nowTime = 0;
@@ -142,7 +185,7 @@
 
             nowTime = (Date.now() - startTime) * 0.001;
 
-            // var rad = (count % 360) * Math.PI / 180;
+            // let rad = (count % 360) * Math.PI / 180;
 
             // m.identity(mMatrix);
             // m.rotate(mMatrix, rad, [0, 1, 0.8], mMatrix);
@@ -157,11 +200,11 @@
             gl[raymarch_shader.uniType[1]](raymarch_shader.uniLocation[1], mouse);
             gl[raymarch_shader.uniType[2]](raymarch_shader.uniLocation[2], [canvasWidth, canvasHeight]);
 
-            gl.drawElements(gl.TRIANGLES, index.length, gl.UNSIGNED_SHORT, 0);
+            gl.drawElements(gl.TRIANGLES, planeIndex.length, gl.UNSIGNED_SHORT, 0);
 
             gl.flush();
 
-            setTimeout(arguments.callee, 1000 / 30);
+            if(run) { requestAnimationFrame(render); }
         }
     }
 
@@ -239,7 +282,7 @@
      * @return {WebGLBuffer} VBO 
      */
     function createVbo(data) {
-        var vbo = gl.createBuffer();
+        let vbo = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);  
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -252,7 +295,7 @@
      * @return {WebGLBuffer} - IBO
      */
     function createIbo(data) {
-        var ibo = gl.createBuffer();
+        let ibo = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(data), gl.STATIC_DRAW);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
@@ -273,22 +316,22 @@
     }
 
     function torus(row, column, irad, orad) {
-        var pos = new Array(), nor = new Array(), 
+        let pos = new Array(), nor = new Array(), 
             col = new Array(), idx = new Array();
-        for(var i=0; i<=row; i++) {
-            var r = Math.PI * 2 / row * i;
-            var rr = Math.cos(r);
-            var ry = Math.sin(r);
-            for(var j = 0; j <= column; j++) {
-                var tr = Math.PI * 2 / column * j;
-                var tx = (rr * irad + orad) * Math.cos(tr);
-                var ty = ry * irad;
-                var tz = (rr * irad + orad) * Math.sin(tr);
-                var rx = rr * Math.cos(tr);
-                var rz = rr * Math.sin(tr);
+        for(let i=0; i<=row; i++) {
+            let r = Math.PI * 2 / row * i;
+            let rr = Math.cos(r);
+            let ry = Math.sin(r);
+            for(let j = 0; j <= column; j++) {
+                let tr = Math.PI * 2 / column * j;
+                let tx = (rr * irad + orad) * Math.cos(tr);
+                let ty = ry * irad;
+                let tz = (rr * irad + orad) * Math.sin(tr);
+                let rx = rr * Math.cos(tr);
+                let rz = rr * Math.sin(tr);
                 pos.push(tx, ty, tz);
                 nor.push(rx, ry, rz);
-                var tc = hsva(360 / column * j, 1, 1, 1);
+                let tc = hsva(360 / column * j, 1, 1, 1);
                 col.push(tc[0], tc[1], tc[2], tc[3]);
             }
         }
@@ -304,19 +347,19 @@
 
     function hsva(h, s, v, a) {
         if(s > 1 || v > 1 || a > 1) { return; }
-        var th = h % 360;
-        var i = Math.floor(th / 60);
-        var f = th / 60 - i;
-        var m = v * (1 - s);
-        var n = v * (1 - s * f);
-        var k = v * (1 - s * (1-f));
-        var color = new Array();
+        let th = h % 360;
+        let i = Math.floor(th / 60);
+        let f = th / 60 - i;
+        let m = v * (1 - s);
+        let n = v * (1 - s * f);
+        let k = v * (1 - s * (1-f));
+        let color = new Array();
         if(!s > 0 && !s < 0) {
             color.push(v, v, v, a);
         } else  {
-            var r = new Array(v, n, m, m, k, v);
-            var g = new Array(k, v, v, n, m, m);
-            var b = new Array(m, m, k, v, v, n);
+            let r = new Array(v, n, m, m, k, v);
+            let g = new Array(k, v, v, n, m, m);
+            let b = new Array(m, m, k, v, v, n);
             color.push(r[i], g[i], b[i], a);
         }
         return color;
@@ -414,15 +457,15 @@
             return;
         }
         let flg = (ext.textureFloat != null) ? gl.FLOAT : ext.textureHalfFloat.HALF_FLOAT_OES;
-        let frameBuffer = gl.createFrameBuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+        let frameBuffer = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
         let fTexture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, fTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, flg, null);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl_TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATRACHMENT0, gl.TEXTURE_2D, fTexture, 0);
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
