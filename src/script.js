@@ -208,6 +208,76 @@
         }
     }
 
+    // utility
+    /**
+     * @class
+     */
+    class InteractionCamera {
+        /**
+         * @constructor
+         */
+        constructor() {
+            this.qtn = qtn.identity(qtn.create());
+            this.dragging = false;
+            this.prevMouse = [0, 0];
+            this.rotationScale = Math.min(window.innerWidth, window.innerHeight);
+            this.rotation = 0.0;
+            this.rotateAxis = [0.0, 0.0, 0.0];
+            this.rotatePower = 1.5;
+            this.rotateAttenuation = 0.9;
+            this.scale = 1.0;
+            this.scalePower = 0.0;
+            this.scaleAttenuation = 0.8;
+            this.scaleMin = 0.5;
+            this.scaleMax = 1.5;
+            this.startEvent = this.startEvent.bind(this);
+            this.moveEvent = this.moveEvent.bind(this);
+            this.endEvent = this.endEvent.bind(this);
+            this.wheelEvent = this.wheelEvent.bind(this);
+        }
+
+        /**
+         * mouse down event
+         * @param {Event} eve - event object
+         */
+        startEvent(eve) {
+            this.dragging = true;
+            this.prevMoues = [eve.clientX, eve.clientY];
+        }
+
+        /**
+         * mouse move event
+         * @param {Event} eve - event object
+         */
+        moveEvent(eve) {
+            if(this.dragging !== true) { return ; }
+            let x = this.prevMouse[0] - eve.clientX;
+            let y = this.prevMouse[1] - eve.clientY;
+            this.rotation = Math.sqrt(x * x + y * y) / this.rotationScale * this.rotatePower;
+            this.rotationAxis[0] = y;
+            this.rotationAxis[1] = x;
+            this.prevMouse = [eve.clientX, eve.clientY];
+        }
+
+        /**
+         * mouse up event
+         */
+        endEvent() {
+            this.dragging = false;
+        }
+
+        /**
+         * wheel event
+         * @param {Event} eve - event object
+         */
+        wheelEvent(eve) {
+            let w = eve.wheelDelta;
+            if(w > 0) {
+                this.scalePower = -0.05;
+            }
+        }
+    }
+
     class ProgramParameter {
         constructor(program) {
             this.program = program;
@@ -426,7 +496,7 @@
         gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
         let depthRenderBuffer = gl.createRenderbuffer();
         gl.bindRenderbuffer(gl.RENDERBUFFER, depthRenderbuffer);
-        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height); // 深度バッファ
         gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRenderBuffer);
         let fTexture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, fTexture);
