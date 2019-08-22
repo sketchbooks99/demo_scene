@@ -3,15 +3,16 @@
     let canvasWidth;
     let canvasHeight;
     let gl;
-    let ext;
-    let run; 
-    let mat;
-    let textures = [];
+    let ext;                    // WebGL の拡張機能を格納する
+    let run;                    // WebGL の実行フラグ
+    let qtn;                    // クォータニオン処理系クラス
+    let mat;                    // 行列処理系クラス
+    let textures = [];          
     let mouse = [0.0, 0.0];
     let isMouseDown = false;
 
-    let lighting_shader;
-    let raymarch_shader;
+    let lighting_shader;        // ライティング処理用のシェーダ
+    let raymarch_shader;        // レイマーチングパス用のシェーダ
 
     const POSTEFFECT_BUFFER_INDEX = 1;
 
@@ -274,7 +275,21 @@
             let w = eve.wheelDelta;
             if(w > 0) {
                 this.scalePower = -0.05;
+            } else if(w < 0) {
+                this.scalePower = 0.05;
             }
+        }
+
+        /**
+         * quaternion update
+         */
+        update() {
+            this.scalePower *= this.scaleAttenuation;
+            this.scale = Math.max(this.scaleMin, Math.min(this.scaleMax, this.scale + this.scalePower));
+            if(this.rotation === 0.0) { return; }
+            this.rotation *= this.rotateAttenuation;
+            let q = qtn.identity(qtn.create());
+            qtn.rotate
         }
     }
 
