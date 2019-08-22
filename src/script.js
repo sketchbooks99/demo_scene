@@ -155,10 +155,9 @@
         m.multiply(pMatrix, vMatrix, tmpMatrix);
 
         // frame buffer
-        let postEffectBuffers = [
-            createFramebufferFloat(ext, canvasWidth, canvasHeight),
-            createFramebufferFloat(ext, canvasWidth, canvasHeight)
-        ];
+        let frameBuffer = createFramebuffer(canvasWidth, canvasHeight);
+        // To bind texture is framebuffer
+        gl.bindTexture(gl.TEXTURE_2D, frameBuffer.texture);
 
         let lightDirection = [-0.5, 0.5, 0.5];
 
