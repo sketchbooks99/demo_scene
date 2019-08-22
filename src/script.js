@@ -3,21 +3,22 @@
     let canvasWidth;
     let canvasHeight;
     let gl;
-    let ext;                    // WebGL の拡張機能を格納する
-    let run;                    // WebGL の実行フラグ
-    let qtn;                    // クォータニオン処理系クラス
-    let mat;                    // 行列処理系クラス
+    let ext;                    // Extension of WebGL
+    let run;                    // Execution Flag of WebGL
+    let qtn;                    // class of processing quaternion
+    let mat;                    // class of processing matrix
+    let camera;                 
     let textures = [];          
     let mouse = [0.0, 0.0];
     let isMouseDown = false;
 
-    let lighting_shader;        // ライティング処理用のシェーダ
-    let raymarch_shader;        // レイマーチングパス用のシェーダ
+    let lighting_shader;        // shader of lighting pass
+    let raymarch_shader;        // shader of raymarching pass
 
     const POSTEFFECT_BUFFER_INDEX = 1;
 
     window.addEventListener('load', () => {
-        // canvas element を取得しサイズをウィンドウサイズに設定
+        // get SIZE of Canvas element to setting Window Size this parameter
         canvas = document.getElementById('canvas');
         canvasWidth = window.innerWidth;
         canvasHeight = window.innerHeight;
@@ -142,6 +143,7 @@
         raymarch_shader.uniType[2]     = 'uniform2fv';
 
         // minMatrix.jsを用いた行列関連処理
+        // Matrix processing using "minMatrix.js"
         let m = new matIV();
         let mMatrix = m.identity(m.create());
         let vMatrix = m.identity(m.create());
@@ -177,11 +179,26 @@
         run = true;
         render();
 
-        // 恒常ループ
+        // Infinite loop
         function render() {
-            gl.clearColor(0.0, 0.0, 0.0, 1.0);
-            gl.clearDepth(1.0);
+
+            // At the first, Burn the Scene to frameBuffer
+            // bind of frameBuffer
+            gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer.framebuffer);
+            gl.useProgram(raymarch_shader.program);
+
+            // setting viewport and clearing imformation of color and depth
+            gl.viewport(0, 0, canvasWidth, canvasHeight);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            // parameter of camera
+            let cameraPosition      = [0.0, 0.0, 3.0];
+            let centerPoint         = [0.0, 0.0, 0.0];
+            let cameraUpDirection   = [0.0, 1.0, 0.0];
+            let fovy    = 60 * camera.scale;
+            let aspect  = canvasWidth / canvasHeight;
+            let near    = 0.1;
+            let far     = 10.0;
 
             nowTime = (Date.now() - startTime) * 0.001;
 
@@ -320,8 +337,8 @@
     }
 
     /**
-     * シェーダオブジェクトを生成して返す
-     * コンパイルに失敗した場合は理由をアラートし null を返す。
+     * creating SHADER Object and return this
+     * when failed to compile, to alert reason and return "null"
      * @param {*} source - シェーダのソースコード文字列
      * @param {*} type - gl.VERTEX_SHADER or gl.FRAGMENT_SHADER
      * @return {WebGLShader} シェーダオブジェクト
@@ -339,8 +356,8 @@
     }
     
     /**
-     * プログラムオブジェクトを生成して返す。
-     * シェーダのリンクに失敗した場合は利用をアラートし null を返す
+     * creating SHADER Object and return "this"
+     * when failed to compile, to alert reason and return "null"
      * @param {WebGLShader} vs 
      * @param {WebGLShader} fs
      * @return {WebGLProgram} プログラムオブジェクト 
@@ -361,8 +378,8 @@
     }
     
     /**
-     * VBO を生成して返す。
-     * @param {Array} data - 頂点属性データを格納した配列
+     * create VBO and return this
+     * @param {Array} data - The Array storing Vertex data
      * @return {WebGLBuffer} VBO 
      */
     function createVbo(data) {
@@ -374,8 +391,8 @@
     }
 
     /**
-     * IBO を生成して返す
-     * @param {Array} data - インデックスデータを格納した配列
+     * create IBO and return this
+     * @param {Array} data - The Array Storing Index data
      * @return {WebGLBuffer} - IBO
      */
     function createIbo(data) {
@@ -387,8 +404,8 @@
     }
 
     /**
-     * IBO を生成して返す（INT 拡張版）
-     * @param {Array} data - インデックスデータを格納した配列
+     * create IBO and return this（version of Extension INT）
+     * @param {Array} data - The Array Storing Index data
      * @return {WebGLBuffer} IBO
      */
     function createIboInt(data) {
@@ -449,11 +466,11 @@
         return color;
     }
 
-    /**
-     * XHR でシェーダのソースコードを外部ファイルから取得しコールバックを呼ぶ
-     * @param {string} vsPath - 頂点シェーダの記述されたファイルのパス 
-     * @param {*} fsPath - フラグメントシェーダの記述されたファイルパス
-     * @param {*} callback - コールバック関数
+    /** 
+     * To CALL "callback" to GET "shader source code" from Outside using XHR
+     * @param {string} vsPath - filePath of Vertex shader
+     * @param {*} fsPath - filePath of Fragment Shader
+     * @param {*} callback - Callback Function
      */
     function loadShaderSource(vsPath, fsPath, callback) {
         let vs, fs;
@@ -480,9 +497,9 @@
     }
 
     /**
-     * @param {Array} vbo - VBOを格納した配列
-     * @param {Array} attL - attribute location を格納した配列
-     * @param {Array} attS - attribute stride を格納した配列
+     * @param {Array} vbo - Array storing Vertex data
+     * @param {Array} attL - Array storing "attribute location"
+     * @param {Array} attS - Array storing "attribute stride"
      * @param {WebGLBuffer} ibo - IBO
      */
     function setAttribute(vbo, attL, attS, ibo) {
@@ -497,20 +514,20 @@
     }
 
     /**
-     * フレームバッファを生成して返す
-     * @param {number} width - フレームバッファの幅
-     * @param {number} height - フレームバッファの高さ 
-     * @return {object} 生成した各種オブジェクトはラップして返却する
-     * @property {WebGLFramebuffer} framebuffer - フレームバッファ
-     * @property {WebGLRenderbuffer} renderbuffer - 深度バッファとして設定したレンダーバッファ
-     * @property {WebGLTexture} texture - カラーバッファとして設定したテクスチャ
+     *  CREATE Framebuffer and RETURN this
+     * @param {number} width - WIDTH of Framebuffer
+     * @param {number} height - HEIGHT of Framebuffer 
+     * @return {object} Return various Object with Wrapping
+     * @property {WebGLFramebuffer} framebuffer - Framebuffer
+     * @property {WebGLRenderbuffer} renderbuffer - Renderbuffer setted as Depthbuffer
+     * @property {WebGLTexture} texture - Texture setted as Colorbuffer
      */
     function createFramebuffer(width, height) {
         let frameBuffer = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
         let depthRenderBuffer = gl.createRenderbuffer();
         gl.bindRenderbuffer(gl.RENDERBUFFER, depthRenderbuffer);
-        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height); // 深度バッファ
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height); // Depth buffer
         gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRenderBuffer);
         let fTexture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, fTexture);
@@ -527,13 +544,13 @@
     }
 
     /**
-     * フレームバッファを生成して返す。（フロートテクスチャ版）
-     * @param {object} ext - getWebGLExtensions の戻り値
-     * @param {number} width - フレームバッファの値
-     * @param {number} height - フレームバッファの高さ
-     * @return {object} 生成した各種オブジェクトはラップして返却する
-     * @property {WebGLFramebuffer} framebuffer - フレームバッファ
-     * @property {WebGLTexture} texture - カラーバッファとして設定したテクスチャ
+     * CREATE and RETUEN Framebuffer (Float Texture version)
+     * @param {object} ext - RETURN Value of getWebGLExtensions 
+     * @param {number} width - WIDTH of Framebuffer
+     * @param {number} height - HEIGHT of Framebuffer
+     * @return {object} Return various Object with Wrapping
+     * @property {WebGLFramebuffer} framebuffer - Framebuffer
+     * @property {WebGLTexture} texture - Texture setted as Colorbuffer
      */
     function createFramebufferFloat(ext, width, height) {
         if(ext == null || (ext.textureFloat == null && ext.textureHalfFloat == null)) {
@@ -557,10 +574,10 @@
     }
 
     /**
-     * @return {object} 取得した拡張機能
-     * @property {object} elementIndexUint - Uint32 フォーマットを利用できるようにする
-     * @property {object} textureFloat - フロートテクスチャを利用できるようにする
-     * @property {object} textureHalfFloat - ハーフフロートテクスチャを利用できるようにする
+     * @return {object} Extension Function have been got
+     * @property {object} elementIndexUint - To be able to use "Uint32" format
+     * @property {object} textureFloat - To be able to use Float Texture
+     * @property {object} textureHalfFloat - To be able to use Half Float Texture
      */
     function getWebGLExtensions(){
         return {
