@@ -11,11 +11,15 @@
     let textures = [];          
     let mouse = [0.0, 0.0];
     let isMouseDown = false;
+    let startTime;
+    let nowTime;
 
     let lighting_shader;        // shader of lighting pass
     let raymarch_shader;        // shader of raymarching pass
+    let post_shader;            // shader of postprocessing pass
 
     const POSTEFFECT_BUFFER_INDEX = 1;
+    const POINT_RESOLUTION = 256;
 
     window.addEventListener('load', () => {
         // get SIZE of Canvas element to setting Window Size this parameter
@@ -24,13 +28,18 @@
         canvasHeight = window.innerHeight;
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
-
+        // Init WebGL Context
         gl = canvas.getContext('webgl');
         if(gl == null) {
             console.log('webgl unsupported');
             return;
         }
+
+        // init various variable
         mat = new matIV();
+        qtn = new qtnIV();
+        camera = new InteractionCamera();
+        camera.update();
 
         // to be enable webgl extensions
         ext = getWebGLExtensions();
@@ -40,6 +49,12 @@
         window.addEventListener('keydown', (eve) => {
             run = eve.keyCode !== 27;
         }, false);
+
+        // Registration of event which is relative with Mouse
+        canvas.addEventListener('mousedown', camera.startEvent, false);
+        canvas.addEventListener('mousemove', camera.moveEvent, false);
+        canvas.addEventListener('mouseup', camera.eneEvent, false);
+        canvas.addEventListener('wheel', camera.wheelEvent, false);
 
         window.addEventListener('mousemove', (eve) => {
             if(isMouseDown !== true) { return; }
@@ -74,10 +89,24 @@
             }
         );
 
+        loadShaderSource(
+            'shader/post.vert',
+            'shader/post.frag',
+            (shader) => {
+                let vs = createShader(shader.vs, gl.VERTEX_SHADER);
+                let fs = createShader(shader.fs, gl.FRAGMENT_SHADER);
+                let prg = createProgram(vs, fs);
+                if(prg == null) { return; }
+                post_shader = new ProgramParameter(prg);
+                loadCheck();
+            }
+        );
+
         function loadCheck() {
             if(
                 lighting_shader != null &&
                 raymarch_shader != null && 
+                post_shader     != null &&
                 true
             ) {init();}
         }
@@ -85,19 +114,53 @@
     }, false);
 
     function init() {
+        // Setting of lighting pass
         lighting_shader.attLocation[0] = gl.getAttribLocation(lighting_shader.program, 'position');
         lighting_shader.attLocation[1] = gl.getAttribLocation(lighting_shader.program, 'normal');
         lighting_shader.attLocation[2] = gl.getAttribLocation(lighting_shader.program, 'color');
-
         lighting_shader.attStride[0] = 3;
         lighting_shader.attStride[1] = 3;
         lighting_shader.attStride[2] = 4;
+        lighting_shader.uniLocation[0] = gl.getUniformLocation(lighting_shader.program, 'mvpMatrix');
+        lighting_shader.uniLocation[1] = gl.getUniformLocation(lighting_shader.program, 'invMatrix');
+        lighting_shader.uniLocation[2] = gl.getUniformLocation(lighting_shader.program, 'lightDirection');
+        lighting_shader.uniType[0] = 'uniformMatrix4fv';
+        lighting_shader.uniType[1] = 'uniformMatrix4fv';
+        lighting_shader.uniType[2] = 'uniform3fv';
+
+        // Setting of raymarch pass
+        raymarch_shader.attLocation[0] = gl.getAttribLocation(raymarch_shader.program, 'position');
+        raymarch_shader.attLocation[1] = gl.getAttribLocation(raymarch_shader.program, 'texcoord');
+        raymarch_shader.attStride[0] = 3;
+        raymarch_shader.attStride[1] = 2;
+        raymarch_shader.uniLocation[0] = gl.getUniformLocation(raymarch_shader.program, 'time');
+        raymarch_shader.uniLocation[1] = gl.getUniformLocation(raymarch_shader.program, 'mouse');
+        raymarch_shader.uniLocation[2] = gl.getUniformLocation(raymarch_shader.program, 'resolution');
+        raymarch_shader.uniLocation[3] = gl.getUniformLocation(raymarch_shader.program, 'mvpMatrix');
+        raymarch_shader.uniType[0]     = 'uniform1f';
+        raymarch_shader.uniType[1]     = 'uniform2fv';
+        raymarch_shader.uniType[2]     = 'uniform2fv';
+        raymarch_shader.uniType[3]     = 'uniformMatrix4fv';
+
+        // Setting of postProcessing pass
+        post_shader.attLocation[0] = gl.getAttribLocation(post_shader.program, 'position');
+        post_shader.attLocation[1] = gl.getAttribLocation(post_shader.program, 'texcoord');
+        post_shader.attStride[0] = 3;
+        post_shader.attStride[1] = 2;
+        post_shader.uniLocation[0] = gl.getUniformLocation(post_shader.program, 'time');
+        post_shader.uniLocation[1] = gl.getUniformLocation(post_shader.program, 'sceneTex');
+        post_shader.uniLocation[2] = gl.getUniformLocation(post_shader.program, 'resolution');
+        post_shader.uniType[0] = 'uniform1f';
+        post_shader.uniType[1] = 'uniform1i';
+        post_shader.uniType[2] = 'uniform2fv';
 
         // let torus_data = torus(32, 32, 1.0, 2.0);
         // let position = torus_data[0];
         // let normal = torus_data[1];
         // let color = torus_data[2];
         // let index = torus_data[3];
+
+
 
         let planePosition = [
             1.0, 1.0, 0.0,
@@ -129,58 +192,51 @@
 
         // setAttribute([pos_vbo, nor_vbo, col_vbo], lighting_shader.attLocation, lighting_shader.attStride, ibo);
 
-        lighting_shader.uniLocation[0] = gl.getUniformLocation(lighting_shader.program, 'mvpMatrix');
-        lighting_shader.uniLocation[1] = gl.getUniformLocation(lighting_shader.program, 'invMatrix');
-        lighting_shader.uniLocation[2] = gl.getUniformLocation(lighting_shader.program, 'lightDirection');
-
-        raymarch_shader.attLocation[0] = gl.getAttribLocation(raymarch_shader.program, 'position');
-        raymarch_shader.attStride[0] = 3;
-        raymarch_shader.uniLocation[0] = gl.getUniformLocation(raymarch_shader.program, 'time');
-        raymarch_shader.uniLocation[1] = gl.getUniformLocation(raymarch_shader.program, 'mouse');
-        raymarch_shader.uniLocation[2] = gl.getUniformLocation(raymarch_shader.program, 'resolution');
-        raymarch_shader.uniType[0]     = 'uniform1f';
-        raymarch_shader.uniType[1]     = 'uniform2fv';
-        raymarch_shader.uniType[2]     = 'uniform2fv';
-
         // minMatrix.jsを用いた行列関連処理
         // Matrix processing using "minMatrix.js"
-        let m = new matIV();
-        let mMatrix = m.identity(m.create());
-        let vMatrix = m.identity(m.create());
-        let pMatrix = m.identity(m.create());
-        let tmpMatrix = m.identity(m.create());
-        let mvpMatrix = m.identity(m.create());
-        let invMatrix = m.identity(m.create());
+        let mMatrix     = mat.identity(mat.create());
+        let vMatrix     = mat.identity(mat.create());
+        let pMatrix     = mat.identity(mat.create());
+        let vpMatrix    = mat.identity(mat.create());
+        let tmpMatrix   = mat.identity(mat.create());
+        let qtnMatrix   = mat.identity(mat.create());
+        let mvpMatrix   = mat.identity(mat.create());
+        let invMatrix   = mat.identity(mat.create());
 
-        m.lookAt([0.0, 0.0, 20.0], [0, 0, 0], [0, 1, 0], vMatrix);
-        m.perspective(45, canvas.width / canvas.height, 0.1, 100, pMatrix);
-        m.multiply(pMatrix, vMatrix, tmpMatrix);
-
-        // frame buffer
-        let frameBuffer = createFramebuffer(canvasWidth, canvasHeight);
-        // To bind texture is framebuffer
-        gl.bindTexture(gl.TEXTURE_2D, frameBuffer.texture);
+        mat.lookAt([0.0, 0.0, 20.0], [0, 0, 0], [0, 1, 0], vMatrix);
+        mat.perspective(45, canvas.width / canvas.height, 0.1, 100, pMatrix);
+        mat.multiply(pMatrix, vMatrix, tmpMatrix);
 
         let lightDirection = [-0.5, 0.5, 0.5];
 
         let count = 0;
 
-        gl.enable(gl.DEPTH_TEST);
-        gl.depthFunc(gl.LEQUAL);
-        gl.enable(gl.CULL_FACE);
+        gl.clearColor(0.7, 0.7, 1.0, 1.0);
+        gl.clearDepth(1.0);
+        gl.enable(gl.DEPTH_TEST);   
 
         gl.bindBuffer(gl.ARRAY_BUFFER, planeVBO);
         gl.enableVertexAttribArray(raymarch_shader.attLocation[0]);
         gl.vertexAttribPointer(raymarch_shader.attLocation[0], 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, planeIBO);
 
-        let startTime = Date.now();
-        let nowTime = 0;
+        // frame buffer
+        let frameBuffer = createFramebuffer(canvasWidth, canvasHeight);
+        // To bind texture is framebuffer
+        gl.bindTexture(gl.TEXTURE_2D, frameBuffer.texture);
+
+        startTime = Date.now();
+        nowTime = 0;
         run = true;
         render();
 
         // Infinite loop
         function render() {
+
+            canvasWidth     = window.innerWidth;
+            canvasHeight    = window.innerHeight;
+            canvas.width    = canvasWidth;
+            canvas.height   = canvasHeight;
 
             // At the first, Burn the Scene to frameBuffer
             // bind of frameBuffer
@@ -202,20 +258,38 @@
 
             nowTime = (Date.now() - startTime) * 0.001;
 
-            // let rad = (count % 360) * Math.PI / 180;
+            // View Projection Matrix
+            mat.lookAt(cameraPosition, centerPoint, cameraUpDirection, vMatrix);
+            mat.perspective(fovy, aspect, near, far, pMatrix);
+            mat.multiply(pMatrix, vMatrix, vpMatrix);
+            camera.update();
+            mat.identity(qtnMatrix);
+            qtn.toMatIV(camera.qtn, qtnMatrix);
+            mat.multiply(vpMatrix, qtnMatrix, vpMatrix);
 
-            // m.identity(mMatrix);
-            // m.rotate(mMatrix, rad, [0, 1, 0.8], mMatrix);
-            // m.multiply(tmpMatrix, mMatrix, mvpMatrix);
-
-            // m.inverse(mMatrix, invMatrix);
-            // gl.uniformMatrix4fv(lighting_shader.uniLocation[0], false, mvpMatrix);
-            // gl.uniformMatrix4fv(lighting_shader.uniLocation[1], false, invMatrix);
-            // gl.uniform3fv(lighting_shader.uniLocation[2], lightDirection);
-
+            // // To be enable IBO and VBO to render for Framebuffer
+            setAttribute(planeVBO, raymarch_shader.attLocation, raymarch_shader.attStride, planeIBO);
+            mat.identity(mMatrix);
+            mat.rotate(mMatrix, nowTime * 0.1, [0.0, 1.0, 0.0], mMatrix);
+            mat.multiply(vpMatrix, mMatrix, mvpMatrix);
             gl[raymarch_shader.uniType[0]](raymarch_shader.uniLocation[0], nowTime);
             gl[raymarch_shader.uniType[1]](raymarch_shader.uniLocation[1], mouse);
             gl[raymarch_shader.uniType[2]](raymarch_shader.uniLocation[2], [canvasWidth, canvasHeight]);
+            gl[raymarch_shader.uniType[3]](raymarch_shader.uniLocation[3], false, mvpMatrix);
+            gl.drawElements(gl.TRIANGLES, planeIndex.length, gl.UNSIGNED_SHORT, 0);
+
+            // End to render framebuffer
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            // Change Program Object
+            gl.useProgram(post_shader.program);
+            // Clear the Scene
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            // Enable VBO for Postprocessing
+            setAttribute(planeVBO, post_shader.attLocation, post_shader.attStride, planeIBO);
+            // Push uniform variable
+            gl[post_shader.uniType[0]](post_shader.uniLocation[0], nowTime);
+            gl[post_shader.uniType[1]](post_shader.uniLocation[1], frameBuffer.texture);
+            gl[post_shader.uniType[2]](post_shader.uniLocation[2], [canvasWidth, canvasHeight]);
 
             gl.drawElements(gl.TRIANGLES, planeIndex.length, gl.UNSIGNED_SHORT, 0);
 
@@ -416,56 +490,6 @@
         return ibo;
     }
 
-    function torus(row, column, irad, orad) {
-        let pos = new Array(), nor = new Array(), 
-            col = new Array(), idx = new Array();
-        for(let i=0; i<=row; i++) {
-            let r = Math.PI * 2 / row * i;
-            let rr = Math.cos(r);
-            let ry = Math.sin(r);
-            for(let j = 0; j <= column; j++) {
-                let tr = Math.PI * 2 / column * j;
-                let tx = (rr * irad + orad) * Math.cos(tr);
-                let ty = ry * irad;
-                let tz = (rr * irad + orad) * Math.sin(tr);
-                let rx = rr * Math.cos(tr);
-                let rz = rr * Math.sin(tr);
-                pos.push(tx, ty, tz);
-                nor.push(rx, ry, rz);
-                let tc = hsva(360 / column * j, 1, 1, 1);
-                col.push(tc[0], tc[1], tc[2], tc[3]);
-            }
-        }
-        for(i = 0; i < row; i++) {
-            for(j = 0; j < column; j++) {
-                r = (column + 1) * i + j;
-                idx.push(r, r + column + 1, r + 1);
-                idx.push(r + column + 1, r + column + 2, r + 1);
-            }
-        }
-        return [pos, nor, col, idx];
-    }
-
-    function hsva(h, s, v, a) {
-        if(s > 1 || v > 1 || a > 1) { return; }
-        let th = h % 360;
-        let i = Math.floor(th / 60);
-        let f = th / 60 - i;
-        let m = v * (1 - s);
-        let n = v * (1 - s * f);
-        let k = v * (1 - s * (1-f));
-        let color = new Array();
-        if(!s > 0 && !s < 0) {
-            color.push(v, v, v, a);
-        } else  {
-            let r = new Array(v, n, m, m, k, v);
-            let g = new Array(k, v, v, n, m, m);
-            let b = new Array(m, m, k, v, v, n);
-            color.push(r[i], g[i], b[i], a);
-        }
-        return color;
-    }
-
     /** 
      * To CALL "callback" to GET "shader source code" from Outside using XHR
      * @param {string} vsPath - filePath of Vertex shader
@@ -522,18 +546,18 @@
      * @property {WebGLRenderbuffer} renderbuffer - Renderbuffer setted as Depthbuffer
      * @property {WebGLTexture} texture - Texture setted as Colorbuffer
      */
-    function createFramebuffer(width, height) {
+    function createFramebuffer(width, height){
         let frameBuffer = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
         let depthRenderBuffer = gl.createRenderbuffer();
-        gl.bindRenderbuffer(gl.RENDERBUFFER, depthRenderbuffer);
-        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height); // Depth buffer
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthRenderBuffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
         gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRenderBuffer);
         let fTexture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, fTexture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSINGED_BYTE, null);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fTexture, 0);

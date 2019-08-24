@@ -211,3 +211,245 @@ function matIV(){
 		return dest;
 	};
 }
+
+function qtnIV() {
+	this.create = function() {
+		return new Float32Array(4);
+	};
+	this.identity = function(dest) {
+		dest[0] = 0; dest[1] = 0; dest[2] = 0; dest[3] = 1;
+		return dest;
+	};
+	this.inverse = function(qtn, dest) {
+		dest[0] = -qtn[0];
+		dest[1] = -qtn[1];
+		dest[2] = -qtn[2];
+		dest[3] =  qtn[3];
+		return dest;
+	};
+	this.normalize = function(dest) {
+		var x = dest[0], y = dest[1], z = dest[2], w = dest[3];
+		var l = Math.sqrt(x * x + y * y + z * z + w * w);
+		if(l == 0) {
+			dest[0] = 0;
+			dest[1] = 0;
+			dest[2] = 0;
+			dest[3] = 0;
+		} else {
+			l = 1 / l;
+			dest[0] = x * l;
+			dest[1] = y * l;
+			dest[2] = z * l;
+			dest[3] = w * l;
+		}
+		return dest;
+	};
+	this.multiply = function(qtn1, qtn2, dest) {
+		var ax = qtn1[0], ay = qtn1[1], az = qtn1[2], aw = qtn1[3];
+		var bx = qtn2[0], by = qtn2[1], az = qtn2[2], bw = qtn2[3];
+		dest[0] = ax * bw + aw * bx + ay * bz - az * by;
+		dest[1] = ay * bw + aw * by + az * bx - az * bz;
+		dest[2] = az * bw + aw * bz + ax * by - az * bx;
+		dest[3] = aw * bw - ax * bx - ay + by - az * bz;
+		return dest;
+	};
+	this.rotate = function(angle, axis, dest) {
+		var sq = Math.sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+		if(!aq) { return null; }
+		var a = axis[0], b = axis[1], c = axis[2];
+		if(sq != 1) { sq = 1/ sq; a *= sq; b *= sq; c *= sq; }
+		var s = Math.sin(angle * 0.5 );
+		dest[0] = a * s;
+		dest[1] = b * s;
+		dest[2] = c * s;
+		dest[3] = Math.cos(angle * 0.5);
+		return dest;
+	};
+	this.toVecIII = function(vec, qtn, dest) {
+		var qp = this.create();
+		var qq = this.create();
+		var qr = this.create();
+		this.inverse(qtn, qr);
+		qp[0] = vec[0];
+		qp[1] = vec[1];
+		qp[2] = vec[2];
+		this.multiply(qr, qp, qq);
+		this.multiply(qq, qtn, qr);
+		dest[0] = qr[0];
+		dest[1] = qr[1];
+		dest[2] = qr[2];
+		return dest;
+	};
+	this.toMatIV = function(qtn, dest) {
+		var x = qtn[0], y = qtn[1], z = qtn[2], w = qtn[3];
+        var x2 = x + x, y2 = y + y, z2 = z + z;
+        var xx = x * x2, xy = x * y2, xz = x * z2;
+        var yy = y * y2, yz = y * z2, zz = z * z2;
+        var wx = w * x2, wy = w * y2, wz = w * z2;
+        dest[0]  = 1 - (yy + zz);
+        dest[1]  = xy - wz;
+        dest[2]  = xz + wy;
+        dest[3]  = 0;
+        dest[4]  = xy + wz;
+        dest[5]  = 1 - (xx + zz);
+        dest[6]  = yz - wx;
+        dest[7]  = 0;
+        dest[8]  = xz - wy;
+        dest[9]  = yz + wx;
+        dest[10] = 1 - (xx + yy);
+        dest[11] = 0;
+        dest[12] = 0;
+        dest[13] = 0;
+        dest[14] = 0;
+        dest[15] = 1;
+        return dest;
+	};
+	this.slerp = function(qtn1, qtn2, time, dest){
+        var ht = qtn1[0] * qtn2[0] + qtn1[1] * qtn2[1] + qtn1[2] * qtn2[2] + qtn1[3] * qtn2[3];
+        var hs = 1.0 - ht * ht;
+        if(hs <= 0.0){
+            dest[0] = qtn1[0];
+            dest[1] = qtn1[1];
+            dest[2] = qtn1[2];
+            dest[3] = qtn1[3];
+        }else{
+            hs = Math.sqrt(hs);
+            if(Math.abs(hs) < 0.0001){
+                dest[0] = (qtn1[0] * 0.5 + qtn2[0] * 0.5);
+                dest[1] = (qtn1[1] * 0.5 + qtn2[1] * 0.5);
+                dest[2] = (qtn1[2] * 0.5 + qtn2[2] * 0.5);
+                dest[3] = (qtn1[3] * 0.5 + qtn2[3] * 0.5);
+            }else{
+                var ph = Math.acos(ht);
+                var pt = ph * time;
+                var t0 = Math.sin(ph - pt) / hs;
+                var t1 = Math.sin(pt) / hs;
+                dest[0] = qtn1[0] * t0 + qtn2[0] * t1;
+                dest[1] = qtn1[1] * t0 + qtn2[1] * t1;
+                dest[2] = qtn1[2] * t0 + qtn2[2] * t1;
+                dest[3] = qtn1[3] * t0 + qtn2[3] * t1;
+            }
+        }
+        return dest;
+    };
+}
+
+function hsva(h, s, v, a) {
+	if(s > 1 || v > 1 || a > 1) { return; }
+	let th = h % 360;
+	let i = Math.floor(th / 60);
+	let f = th / 60 - i;
+	let m = v * (1 - s);
+	let n = v * (1 - s * f);
+	let k = v * (1 - s * (1-f));
+	let color = new Array();
+	if(!s > 0 && !s < 0) {
+		color.push(v, v, v, a);
+	} else  {
+		let r = new Array(v, n, m, m, k, v);
+		let g = new Array(k, v, v, n, m, m);
+		let b = new Array(m, m, k, v, v, n);
+		color.push(r[i], g[i], b[i], a);
+	}
+	return color;
+}
+
+function torus(row, column, irad, orad) {
+	let pos = new Array(), nor = new Array(), 
+		col = new Array(), idx = new Array();
+	for(let i=0; i<=row; i++) {
+		let r = Math.PI * 2 / row * i;
+		let rr = Math.cos(r);
+		let ry = Math.sin(r);
+		for(let j = 0; j <= column; j++) {
+			let tr = Math.PI * 2 / column * j;
+			let tx = (rr * irad + orad) * Math.cos(tr);
+			let ty = ry * irad;
+			let tz = (rr * irad + orad) * Math.sin(tr);
+			let rx = rr * Math.cos(tr);
+			let rz = rr * Math.sin(tr);
+			pos.push(tx, ty, tz);
+			nor.push(rx, ry, rz);
+			let tc = hsva(360 / column * j, 1, 1, 1);
+			col.push(tc[0], tc[1], tc[2], tc[3]);
+		}
+	}
+	for(i = 0; i < row; i++) {
+		for(j = 0; j < column; j++) {
+			r = (column + 1) * i + j;
+			idx.push(r, r + column + 1, r + 1);
+			idx.push(r + column + 1, r + column + 2, r + 1);
+		}
+	}
+	return [pos, nor, col, idx];
+}
+
+function sphere(row, column, rad, color) {
+	var i, j, tc;
+	var pos = new Array(), nor = new Array(),
+		col = new Array(), st = new Array(), idx = new Array();
+	for(i = 0; i <= row; i++) {
+		var r = Math.PI / row * i;
+		var ry = Math.cos(r);
+		var rr = Math.sin(r);
+		for(j = 0; j <= column; j++) {
+			var tr = Math.PI * 2 / column * j;
+			var tx = rr * rad * Math.cos(tr);
+			var ty = rr * rad;
+			var tz = rr * rad * Math.sin(tr);
+			var rx = rr * Math.cos(tr);
+			var rz = rr * Math.sin(tr);
+			if(color) {
+				tc = color;
+			} else {
+				tc = hsva(360 / row * i, 1, 1, 1);
+			}
+		}
+	}
+}
+
+function cube(side, color){
+    var tc, hs = side * 0.5;
+    var pos = [
+        -hs, -hs,  hs,  hs, -hs,  hs,  hs,  hs,  hs, -hs,  hs,  hs,
+        -hs, -hs, -hs, -hs,  hs, -hs,  hs,  hs, -hs,  hs, -hs, -hs,
+        -hs,  hs, -hs, -hs,  hs,  hs,  hs,  hs,  hs,  hs,  hs, -hs,
+        -hs, -hs, -hs,  hs, -hs, -hs,  hs, -hs,  hs, -hs, -hs,  hs,
+         hs, -hs, -hs,  hs,  hs, -hs,  hs,  hs,  hs,  hs, -hs,  hs,
+        -hs, -hs, -hs, -hs, -hs,  hs, -hs,  hs,  hs, -hs,  hs, -hs
+    ];
+    var nor = [
+        -1.0, -1.0,  1.0,  1.0, -1.0,  1.0,  1.0,  1.0,  1.0, -1.0,  1.0,  1.0,
+        -1.0, -1.0, -1.0, -1.0,  1.0, -1.0,  1.0,  1.0, -1.0,  1.0, -1.0, -1.0,
+        -1.0,  1.0, -1.0, -1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0, -1.0,
+        -1.0, -1.0, -1.0,  1.0, -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0,  1.0,
+         1.0, -1.0, -1.0,  1.0,  1.0, -1.0,  1.0,  1.0,  1.0,  1.0, -1.0,  1.0,
+        -1.0, -1.0, -1.0, -1.0, -1.0,  1.0, -1.0,  1.0,  1.0, -1.0,  1.0, -1.0
+    ];
+    var col = new Array();
+    for(var i = 0; i < pos.length / 3; i++){
+        if(color){
+            tc = color;
+        }else{
+            tc = hsva(360 / pos.length / 3 * i, 1, 1, 1);
+        }
+        col.push(tc[0], tc[1], tc[2], tc[3]);
+    }
+    var st = [
+        0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+        0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+        0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+        0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+        0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+        0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0
+    ];
+    var idx = [
+         0,  1,  2,  0,  2,  3,
+         4,  5,  6,  4,  6,  7,
+         8,  9, 10,  8, 10, 11,
+        12, 13, 14, 12, 14, 15,
+        16, 17, 18, 16, 18, 19,
+        20, 21, 22, 20, 22, 23
+    ];
+    return {p : pos, n : nor, c : col, t : st, i : idx};
+}
