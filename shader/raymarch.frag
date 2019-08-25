@@ -1,10 +1,14 @@
+#version 300 es
+
 precision mediump float;
 
-varying vec2 vTexCoord;
+in vec2 vTexCoord;
 
 uniform float time;
 uniform vec2 mouse;
 uniform vec2 resolution;
+
+out vec4 fragColor;
 
 // probably smooth min function
 float smin( float a, float b, float k ) {
@@ -95,5 +99,5 @@ void main() {
         col = vec3(1.0, 0.7, 0.5) * sun_dif * sun_sha;
         col += vec3(0.0, 0.2, 0.4) * sky_dif;
     }
-    gl_FragColor = vec4(col, 1.0);
+    fragColor = vec4(col, 1.0);
 }

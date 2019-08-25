@@ -1,9 +1,11 @@
+#version 300 es
+
 uniform mat4 mvpMatrix;
 
-attribute vec3 position;
-attribute vec2 texcoord;
+in vec3 position;
+in vec2 texcoord;
 
-varying vec2 vTexCoord;
+out vec2 vTexCoord;
 
 void main() {
     // gl_Position = vec4(position, 1.0);
