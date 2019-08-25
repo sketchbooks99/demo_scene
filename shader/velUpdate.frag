@@ -116,12 +116,22 @@ vec3 curlNoise(vec3 v){
     return normalize(vec3(x, y, z) * 1.0 / (2.0 * EPSILON));
 }
 
+const float PI = 3.1415926;
+const float PI2 = PI * 2.0;
+vec3 reset( vec2 p ) {
+    float s = sin(p.y * PI);
+    float x = cos(p.x * PI2) * s;
+    float y = -cos(p.y * PI);
+    float z = sin(p.x * PI2) * s;
+    return vec3(x, y, z); 
+}
+
 void main(){
     vec4 prevVelocity = texture(prevTexture, vTexCoord);
     vec4 position = texture(positionTexture, vTexCoord);
     vec3 velocity = prevVelocity.xyz;
-    if(move){
-        velocity = curlNoise(position.xyz + vec3(0.0, -time * 0.25, 0.0));
-    }
-    fragColor = vec4(normalize(velocity), 0.0);
+    
+    velocity = curlNoise(position.xyz + vec3(0.0, -time * 0.25, 0.0));
+    
+    fragColor = vec4(normalize(velocity), prevVelocity.w);
 }

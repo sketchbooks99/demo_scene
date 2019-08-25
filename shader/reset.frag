@@ -9,12 +9,22 @@ in vec2 vTexCoord;
 
 out vec4 fragColor;
 
-void main() {
-    // vec2 p = vTexCoord / resolution;
-    vec2 p = vTexCoord;
+float rand(vec2 co){
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
+vec3 reset( vec2 p ) {
     float s = sin(p.y * PI);
     float x = cos(p.x * PI2) * s;
     float y = -cos(p.y * PI);
     float z = sin(p.x * PI2) * s;
-    fragColor = vec4(normalize(vec3(x, y, z)), 0.0);
+    return vec3(x, y, z); 
+}
+
+void main() {
+    // vec2 p = vTexCoord / resolution;
+    vec2 p = vTexCoord;
+    vec3 reset_val = reset( p );
+    float lifetime = rand(p) < 0.3 ? rand( p ) : 1.0;
+    fragColor = vec4(normalize(reset_val), lifetime);
 }

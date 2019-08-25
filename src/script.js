@@ -26,7 +26,7 @@
     const POSITION_BUFFER_INDEX = 1;
     const VELOCITY_BUFFER_INDEX = 3;
     const POINT_RESOLUTION = 256;
-    const POINT_SIZE = 1.5;
+    const POINT_SIZE = 2.0;
 
     window.addEventListener('load', () => {
         // get SIZE of Canvas element to setting Window Size this parameter
